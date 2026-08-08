@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "course_id": "",
+  "title": "",
+  "mode": "new",
+  "status": "planning",
+  "created_at": "",
+  "updated_at": "",
+  "goal": "",
+  "stack": [],
+  "phase": {
+    "id": "0",
+    "title": "需求访谈与方案选择",
+    "status": "in_progress"
+  },
+  "current_lesson": null,
+  "next_lesson": null,
+  "milestones": [
+    {"id": "1", "title": "可运行 Walking Skeleton", "status": "pending"},
+    {"id": "2", "title": "核心抽象与接口", "status": "pending"},
+    {"id": "3", "title": "基础设施", "status": "pending"},
+    {"id": "4", "title": "子系统逐个实现", "status": "pending"},
+    {"id": "5", "title": "系统集成与本地质量完善", "status": "pending"},
+    {"id": "6", "title": "完整项目验收与课程复盘", "status": "pending"}
+  ],
+  "decisions": [],
+  "blockers": [],
+  "completed_lessons": [],
+  "recent_verification": [],
+  "summary": "课程尚处于需求访谈与方案选择阶段。",
+  "acceptance": {
+    "requirements_mapped": false,
+    "requirements_map_path": "",
+    "architecture_current": false,
+    "architecture_path": "",
+    "start_command": null,
+    "test_command": null,
+    "excluded_launch_work": []
+  }
+}
