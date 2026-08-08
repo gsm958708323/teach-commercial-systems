@@ -35,6 +35,8 @@
     "architecture_path": "",
     "start_command": null,
     "test_command": null,
+    "commercial_readiness_checked": false,
+    "learning_assessment_checked": false,
     "excluded_launch_work": []
   }
 }

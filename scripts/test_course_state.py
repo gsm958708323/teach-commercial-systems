@@ -47,6 +47,32 @@ class CourseStateTests(unittest.TestCase):
         )
         return payload_path
 
+    def create_lesson_artifacts(self, lesson_id: str = "01-skeleton") -> tuple[Path, Path, Path]:
+        demo = self.project_root / "learning-labs" / COURSE_ID / lesson_id
+        demo.mkdir(parents=True)
+        (demo / "main.py").write_text("print('demo')\n", encoding="utf-8")
+        doc = (
+            self.project_root
+            / "docs"
+            / "course"
+            / COURSE_ID
+            / "lessons"
+            / f"{lesson_id}.md"
+        )
+        doc.parent.mkdir(parents=True)
+        doc.write_text(
+            "# Walking Skeleton\n\n"
+            "- 路径：learning-labs/course-a1b2c3d4/01-skeleton\n"
+            "- 运行命令：python main.py\n"
+            "- 预期结果：输出 demo\n"
+            "- 实际结果：输出 demo\n",
+            encoding="utf-8",
+        )
+        main_file = self.project_root / "src" / "main.py"
+        main_file.parent.mkdir()
+        main_file.write_text("print('project')\n", encoding="utf-8")
+        return demo, doc, main_file
+
     def test_init_creates_utf8_state_and_templates(self) -> None:
         state = self.init_course()
 
@@ -292,6 +318,155 @@ class CourseStateTests(unittest.TestCase):
                 now=FIXED_NOW,
             )
 
+    def test_cannot_start_next_lesson_before_confirmation_checkpoint(self) -> None:
+        self.init_course()
+        demo, doc, main_file = self.create_lesson_artifacts("01-skeleton")
+        state = self.read_state()
+        state["status"] = "active"
+        state["phase"] = {
+            "id": "1",
+            "title": "可运行 Walking Skeleton",
+            "status": "in_progress",
+        }
+        state["current_lesson"] = {
+            "id": "01-skeleton",
+            "title": "Walking Skeleton",
+            "status": "awaiting_confirmation",
+            "demo_path": demo.relative_to(self.project_root).as_posix(),
+            "doc_path": doc.relative_to(self.project_root).as_posix(),
+            "main_files": [main_file.relative_to(self.project_root).as_posix()],
+            "verification": [
+                {
+                    "scope": "demo",
+                    "command": "python main.py",
+                    "status": "passed",
+                    "summary": "Demo passed",
+                },
+                {
+                    "scope": "project",
+                    "command": "python src/main.py",
+                    "status": "passed",
+                    "summary": "Project passed",
+                },
+            ],
+        }
+        (self.project_root / ".course" / "course.json").write_text(
+            json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        payload = {
+            "course_status": "active",
+            "phase_id": "2",
+            "phase_status": "in_progress",
+            "current_lesson": {
+                "id": "02-core-contracts",
+                "title": "核心抽象与接口",
+                "status": "in_progress",
+                "demo_path": "",
+                "doc_path": "",
+                "main_files": [],
+                "verification": [],
+            },
+            "next_lesson": None,
+            "summary": "尝试直接开始下一节。",
+            "decisions": [],
+            "blockers": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "complete the awaiting lesson"):
+            course_state.apply_checkpoint(
+                self.project_root,
+                self.write_payload(payload),
+                now=FIXED_NOW,
+            )
+
+    def test_lesson_can_only_complete_from_awaiting_confirmation(self) -> None:
+        self.init_course()
+        demo, doc, main_file = self.create_lesson_artifacts("01-skeleton")
+        payload = {
+            "course_status": "active",
+            "phase_id": "1",
+            "phase_status": "in_progress",
+            "current_lesson": {
+                "id": "01-skeleton",
+                "title": "Walking Skeleton",
+                "status": "complete",
+                "demo_path": demo.relative_to(self.project_root).as_posix(),
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [main_file.relative_to(self.project_root).as_posix()],
+                "verification": [
+                    {
+                        "scope": "demo",
+                        "command": "python main.py",
+                        "status": "passed",
+                        "summary": "Demo passed",
+                    },
+                    {
+                        "scope": "project",
+                        "command": "python src/main.py",
+                        "status": "passed",
+                        "summary": "Project passed",
+                    },
+                ],
+            },
+            "next_lesson": None,
+            "summary": "尝试跳过等待确认。",
+            "decisions": [],
+            "blockers": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "awaiting_confirmation"):
+            course_state.apply_checkpoint(
+                self.project_root,
+                self.write_payload(payload),
+                now=FIXED_NOW,
+            )
+
+    def test_awaiting_confirmation_rejects_template_and_placeholder_artifacts(self) -> None:
+        self.init_course()
+        demo, doc, main_file = self.create_lesson_artifacts("01-skeleton")
+        doc.write_text("# {{LESSON_ID}} {{LESSON_TITLE}}\n\n- 路径：\n", encoding="utf-8")
+        main_file.write_text("raise NotImplementedError('TODO')\n", encoding="utf-8")
+        payload = {
+            "course_status": "active",
+            "phase_id": "1",
+            "phase_status": "in_progress",
+            "current_lesson": {
+                "id": "01-skeleton",
+                "title": "Walking Skeleton",
+                "status": "awaiting_confirmation",
+                "demo_path": demo.relative_to(self.project_root).as_posix(),
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [main_file.relative_to(self.project_root).as_posix()],
+                "verification": [
+                    {
+                        "scope": "demo",
+                        "command": "python main.py",
+                        "status": "passed",
+                        "summary": "Demo passed",
+                    },
+                    {
+                        "scope": "project",
+                        "command": "python src/main.py",
+                        "status": "passed",
+                        "summary": "Project passed",
+                    },
+                ],
+            },
+            "next_lesson": None,
+            "summary": "骨架完成。",
+            "decisions": [],
+            "blockers": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "placeholder"):
+            course_state.apply_checkpoint(
+                self.project_root,
+                self.write_payload(payload),
+                now=FIXED_NOW,
+            )
+
     def test_validate_rejects_malformed_lesson_and_milestone(self) -> None:
         self.init_course()
         state = self.read_state()
@@ -377,24 +552,67 @@ class CourseStateTests(unittest.TestCase):
 
         self.assertIn("at least one completed formal lesson is required", errors)
 
+    def test_complete_validation_requires_commercial_and_learning_acceptance(self) -> None:
+        self.init_course()
+        demo, doc, main_file = self.create_lesson_artifacts("01-skeleton")
+        architecture = self.project_root / "docs" / "architecture.md"
+        architecture.write_text("# Architecture\n", encoding="utf-8")
+        requirements_map = self.project_root / "docs" / "acceptance-map.md"
+        requirements_map.write_text("# Acceptance map\n", encoding="utf-8")
+
+        state = self.read_state()
+        state["status"] = "complete"
+        state["phase"] = {"id": "6", "title": "完整项目验收与课程复盘", "status": "complete"}
+        state["milestones"] = [
+            {**milestone, "status": "complete"}
+            for milestone in state["milestones"]
+        ]
+        state["completed_lessons"] = [
+            {
+                "id": "01-skeleton",
+                "title": "Walking Skeleton",
+                "demo_path": demo.relative_to(self.project_root).as_posix(),
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [main_file.relative_to(self.project_root).as_posix()],
+                "verification": [
+                    {
+                        "scope": "demo",
+                        "command": "python main.py",
+                        "status": "passed",
+                        "summary": "Demo passed",
+                    },
+                    {
+                        "scope": "project",
+                        "command": "python src/main.py",
+                        "status": "passed",
+                        "summary": "Project passed",
+                    },
+                ],
+            }
+        ]
+        state["blockers"] = []
+        state["acceptance"] = {
+            "requirements_mapped": True,
+            "requirements_map_path": "docs/acceptance-map.md",
+            "architecture_current": True,
+            "architecture_path": "docs/architecture.md",
+            "start_command": {"command": "python src/main.py", "status": "passed"},
+            "test_command": {"command": "python -m unittest", "status": "passed"},
+            "excluded_launch_work": ["真实云部署", "线上监控验证"],
+        }
+        (self.project_root / ".course" / "course.json").write_text(
+            json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        errors = course_state.validate_course(self.project_root, complete=True)
+
+        self.assertIn("commercial readiness must be checked", errors)
+        self.assertIn("learning assessment must be checked", errors)
+
     def test_complete_validation_passes_for_integrated_course(self) -> None:
         self.init_course()
-        demo = self.project_root / "learning-labs" / COURSE_ID / "01-skeleton"
-        demo.mkdir(parents=True)
-        (demo / "main.py").write_text("print('demo')\n", encoding="utf-8")
-        doc = (
-            self.project_root
-            / "docs"
-            / "course"
-            / COURSE_ID
-            / "lessons"
-            / "01-skeleton.md"
-        )
-        doc.parent.mkdir(parents=True)
-        doc.write_text("# Walking Skeleton\n", encoding="utf-8")
-        main_file = self.project_root / "src" / "main.py"
-        main_file.parent.mkdir()
-        main_file.write_text("print('project')\n", encoding="utf-8")
+        self.create_lesson_artifacts("01-skeleton")
         architecture = self.project_root / "docs" / "architecture.md"
         architecture.write_text("# Architecture\n", encoding="utf-8")
         requirements_map = self.project_root / "docs" / "acceptance-map.md"
@@ -438,6 +656,8 @@ class CourseStateTests(unittest.TestCase):
             "architecture_path": "docs/architecture.md",
             "start_command": {"command": "python src/main.py", "status": "passed"},
             "test_command": {"command": "python -m unittest", "status": "passed"},
+            "commercial_readiness_checked": True,
+            "learning_assessment_checked": True,
             "excluded_launch_work": ["真实云部署", "线上监控验证"],
         }
         (self.project_root / ".course" / "course.json").write_text(

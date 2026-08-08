@@ -19,6 +19,13 @@ MILESTONE_STATUSES = {"pending", "in_progress", "complete", "blocked"}
 EXPECTED_MILESTONE_IDS = [str(index) for index in range(1, 7)]
 PROGRESS_ARCHIVE_THRESHOLD = 400
 PROGRESS_SECTION_PATTERN = re.compile(r"^## .+ \| 阶段 (?P<phase_id>[0-9]+)\s*$")
+PLACEHOLDER_PATTERN = re.compile(
+    r"\{\{[^}]+\}\}|\bTODO\b|\bTBD\b|\bplaceholder\b|NotImplemented|其余省略|待补充",
+    re.IGNORECASE,
+)
+EMPTY_LESSON_FIELD_PATTERN = re.compile(
+    r"^- (路径|运行命令|预期结果|实际结果|它证明的原理)：\s*$"
+)
 LESSON_STATUSES = {
     "planned",
     "in_progress",
@@ -275,6 +282,69 @@ def _validate_blockers(value: Any) -> list[str]:
     return [_require_string(item, "blockers[]") for item in value]
 
 
+def _transition_errors(
+    previous_state: dict[str, Any],
+    *,
+    phase_id: str,
+    current_lesson: dict[str, Any] | None,
+) -> list[str]:
+    errors: list[str] = []
+    previous_lesson = previous_state.get("current_lesson")
+
+    if isinstance(previous_lesson, dict):
+        previous_id = previous_lesson.get("id")
+        previous_status = previous_lesson.get("status")
+        incoming_id = current_lesson.get("id") if current_lesson else None
+        incoming_status = current_lesson.get("status") if current_lesson else None
+
+        if previous_status == "awaiting_confirmation":
+            if incoming_id != previous_id:
+                errors.append(
+                    "complete the awaiting lesson before starting another lesson"
+                )
+            elif incoming_status not in {
+                "awaiting_confirmation",
+                "blocked",
+                "complete",
+            }:
+                errors.append(
+                    "complete the awaiting lesson before moving it backward"
+                )
+
+    if current_lesson and current_lesson["status"] == "complete":
+        previous_matches = (
+            isinstance(previous_lesson, dict)
+            and previous_lesson.get("id") == current_lesson["id"]
+            and previous_lesson.get("status") == "awaiting_confirmation"
+        )
+        already_completed = any(
+            isinstance(item, dict) and item.get("id") == current_lesson["id"]
+            for item in previous_state.get("completed_lessons", [])
+        )
+        if not previous_matches and not already_completed:
+            errors.append("lesson can only be completed from awaiting_confirmation")
+
+    if phase_id != "0":
+        try:
+            target_phase = int(phase_id)
+        except ValueError:
+            target_phase = 0
+        for milestone in previous_state.get("milestones", []):
+            if not isinstance(milestone, dict):
+                continue
+            try:
+                milestone_id = int(str(milestone.get("id", "")))
+            except ValueError:
+                continue
+            if milestone_id < target_phase and milestone.get("status") != "complete":
+                errors.append(
+                    f"cannot enter phase {phase_id} before phase {milestone_id} is complete"
+                )
+                break
+
+    return errors
+
+
 def init_course(
     project_root: str | Path,
     *,
@@ -380,6 +450,16 @@ def apply_checkpoint(
         raise ValueError("summary must not exceed 2000 characters")
     decisions = _validate_decisions(payload.get("decisions"))
     blockers = _validate_blockers(payload.get("blockers"))
+
+    transition_errors = _transition_errors(
+        state,
+        phase_id=phase_id,
+        current_lesson=current_lesson,
+    )
+    if transition_errors:
+        raise ValueError(
+            "invalid state transition: " + "; ".join(transition_errors)
+        )
 
     merged_decisions = list(state.get("decisions", []))
     decision_by_id = {
@@ -619,6 +699,64 @@ def _path_exists(root: Path, value: Any, field: str, *, directory: bool = False)
     return None
 
 
+def _placeholder_errors(path: Path, field: str) -> list[str]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return []
+    except OSError as exc:
+        return [f"{field} cannot be read as UTF-8 text: {exc}"]
+
+    errors: list[str] = []
+    if PLACEHOLDER_PATTERN.search(content):
+        errors.append(f"{field} contains placeholder marker")
+    return errors
+
+
+def _lesson_doc_quality_errors(path: Path, field: str) -> list[str]:
+    errors = _placeholder_errors(path, field)
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return errors
+    except OSError:
+        return errors
+
+    for line in content.splitlines():
+        if EMPTY_LESSON_FIELD_PATTERN.match(line.strip()):
+            errors.append(f"{field} contains empty lesson field: {line.strip()}")
+            break
+    return errors
+
+
+def _lesson_quality_errors(
+    root: Path,
+    lesson: dict[str, Any],
+    field: str,
+) -> list[str]:
+    errors: list[str] = []
+    demo_dir = root / lesson["demo_path"]
+    if demo_dir.is_dir():
+        demo_files = [path for path in demo_dir.rglob("*") if path.is_file()]
+        if not demo_files:
+            errors.append(f"{field}.demo_path has no files")
+        for path in demo_files:
+            relative = path.relative_to(demo_dir).as_posix()
+            errors.extend(
+                _placeholder_errors(path, f"{field}.demo_path/{relative}")
+            )
+
+    doc_path = root / lesson["doc_path"]
+    if doc_path.is_file():
+        errors.extend(_lesson_doc_quality_errors(doc_path, f"{field}.doc_path"))
+
+    for index, main_file in enumerate(lesson["main_files"]):
+        path = root / main_file
+        if path.is_file():
+            errors.extend(_placeholder_errors(path, f"{field}.main_files[{index}]"))
+    return errors
+
+
 def _lesson_artifact_errors(
     root: Path,
     lesson: dict[str, Any],
@@ -636,6 +774,7 @@ def _lesson_artifact_errors(
         error = _path_exists(root, path, f"{field}.main_files[{index}]")
         if error:
             errors.append(error)
+    errors.extend(_lesson_quality_errors(root, lesson, field))
     return errors
 
 
@@ -782,6 +921,11 @@ def _completion_errors(root: Path, state: dict[str, Any]) -> list[str]:
             errors.append(f"acceptance.{key}.command must not be empty")
         if command.get("status") != "passed":
             errors.append(f"acceptance.{key} must have passed")
+
+    if acceptance.get("commercial_readiness_checked") is not True:
+        errors.append("commercial readiness must be checked")
+    if acceptance.get("learning_assessment_checked") is not True:
+        errors.append("learning assessment must be checked")
 
     excluded = acceptance.get("excluded_launch_work")
     if not isinstance(excluded, list) or not excluded:

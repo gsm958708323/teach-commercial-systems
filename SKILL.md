@@ -7,7 +7,7 @@ description: "以顶级领域架构师视角，用中文分阶段教授并实际
 
 ## 核心目标
 
-教会用户自己完成系统设计，同时让每个正式课程节产生可运行代码，并持续集成到一个最终项目。把需求访谈当作准备阶段；不要为了满足“每节有代码”而在方案确认前生成无关代码。
+教会用户自己完成系统设计，同时让每个正式课程节产生可运行代码，并持续集成到一个最终项目。课程要同时训练设计判断力、交付本地完整的商用候选项目，并清楚标出未上线工作。把需求访谈当作准备阶段；不要为了满足“每节有代码”而在方案确认前生成无关代码。
 
 ## 首次路由
 
@@ -15,8 +15,10 @@ description: "以顶级领域架构师视角，用中文分阶段教授并实际
 2. 检查 `<project-root>/.course/course.json`：
    - 存在时，运行 `python <skill-root>/scripts/course_state.py resume <project-root>`，恢复当前课程，不重新访谈已确认内容。
    - 不存在时，阅读 [course-workflow.md](references/course-workflow.md)，识别 `new` 或 `existing` 模式，完成最小需求访谈后初始化课程。
-3. 仅在游戏、战斗、ECS、回放、确定性模拟或网络同步主题中读取 [game-systems.md](references/game-systems.md)。
-4. 每次开始正式课程节前读取 [lesson-contract.md](references/lesson-contract.md)，严格完成其中的 Definition of Done。
+3. 在需求访谈、阶段 5/6、最终验收或用户关注“可商用/交付质量”时读取 [commercial-readiness.md](references/commercial-readiness.md)。
+4. 在设计自检、用户理解评估、阶段复盘或用户关注“学会设计原理”时读取 [learning-assessment.md](references/learning-assessment.md)。
+5. 仅在游戏、战斗、ECS、回放、确定性模拟或网络同步主题中读取 [game-systems.md](references/game-systems.md)。
+6. 每次开始正式课程节前读取 [lesson-contract.md](references/lesson-contract.md)，严格完成其中的 Definition of Done。
 
 解析 `<skill-root>` 为本 `SKILL.md` 所在目录。不要假定当前工作目录就是 Skill 目录。
 
@@ -65,7 +67,7 @@ course_state.py validate <project-root> [--complete]
 
 把完整代码写入文件。对话只展示最关键的 1–2 个代码片段，其余使用文件链接和运行结果说明。不要留下影响本节运行的占位实现、缺失 import、缺失配置或省略代码。
 
-将完整讲解写入 `docs/course/<course-id>/lessons/<lesson-id>.md`。使用 `assets/templates/lesson.md` 的结构，包含为什么、替代方案、接口与数据结构、调用链、Demo、主项目集成、验证结果、业余做法与商业做法、扩展边界和自检场景。
+将完整讲解写入 `docs/course/<course-id>/lessons/<lesson-id>.md`。使用 `assets/templates/lesson.md` 的结构，包含为什么、替代方案、接口与数据结构、调用链、Demo、主项目集成、验证结果、Demo/主项目/商用候选版本边界、业余做法与商业做法、扩展边界和设计反推自检场景。
 
 ## 每轮结束
 
@@ -85,8 +87,10 @@ course_state.py validate <project-root> [--complete]
 - 所有承诺功能已集成到主项目。
 - 主项目启动命令和核心测试已实际通过。
 - 每个正式课程节都保留 Demo、讲解、主项目文件映射和两类验证。
+- 每个正式课程节都说明 Demo、主项目和商用候选版本的差异，并包含设计反推自检。
 - 最终架构文档与代码一致。
 - 使用 `assets/templates/acceptance-map.md` 建立需求、代码、测试和课程节映射。
+- 最终 checkpoint 记录 `acceptance.commercial_readiness_checked=true` 与 `acceptance.learning_assessment_checked=true`。
 - 阻塞为空，并列出尚未覆盖的部署、运维和线上验证工作。
 
 将结果称为“本地完整、production-shaped 的教学项目”，不要声称它已经生产上线。

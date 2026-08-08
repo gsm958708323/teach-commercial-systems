@@ -32,8 +32,8 @@
 | 2. 核心抽象与接口 | 固定关键数据、接口和依赖方向 | 最小抽象 Demo、主项目 contracts、contract tests | 复杂需求走查不破坏边界 |
 | 3. 基础设施 | 提供当前项目真正需要的通用能力 | 每项能力的独立 Demo、主项目实现和测试 | 子系统不再自建重复基础能力 |
 | 4. 子系统逐个实现 | 按依赖顺序完成业务能力 | 每个子系统的 Demo、完整主代码和测试 | 约定功能全部集成 |
-| 5. 集成与本地质量 | 验证跨子系统流程、调试性和本地质量 | 集成场景、回归测试、必要诊断能力 | 核心用户流程稳定通过 |
-| 6. 验收与复盘 | 证明课程和项目闭环 | 验收映射、最终架构文档、运行说明 | `validate --complete` 通过 |
+| 5. 集成与本地质量 | 验证跨子系统流程、调试性、本地质量和商用候选风险 | 集成场景、回归测试、必要诊断能力、商业风险清单 | 核心用户流程稳定通过，关键商业风险已解决或记录 |
+| 6. 验收与复盘 | 证明课程、项目和学习目标闭环 | 验收映射、最终架构文档、运行说明、学习复盘 | `validate --complete` 通过 |
 
 基础设施清单不是固定购物清单。只有当前系统确实需要时才实现 pool、clock、random、event bus、scheduler、logging 或 configuration。
 
@@ -49,6 +49,8 @@
 - 语言、框架、平台和禁止事项。
 - 本地运行与测试命令的目标形态。
 - 功能范围和明确不做的内容。
+- 商用候选版本的边界：必须完整交付什么，哪些上线工作明确不包含。
+- 学习验收方式：用户希望通过方案选择、设计反推、代码走查还是复盘来训练判断力。
 
 在具体设计前提供 3–5 个架构方案。使用表格比较问题适配度、复杂度、性能或扩展成本、调试难度和推荐理由。用户选择后，把决定写入 checkpoint；不要只留在对话中。
 
@@ -84,6 +86,8 @@ planning
 ```
 
 用户在 `awaiting_confirmation` 时追问，只回答当前节。用户选择“进入下一节”后，先用原课程节的完整验证信息建立 `complete` checkpoint，再启动下一节。
+
+不得从 `awaiting_confirmation` 直接切换到其他课程节。不得把未进入 `awaiting_confirmation` 的课程节直接标记为 `complete`。
 
 ## 6. Checkpoint 格式
 
@@ -159,6 +163,8 @@ planning
   "architecture_path": "docs/architecture.md",
   "start_command": {"command": "<实际命令>", "status": "passed"},
   "test_command": {"command": "<实际命令>", "status": "passed"},
+  "commercial_readiness_checked": true,
+  "learning_assessment_checked": true,
   "excluded_launch_work": ["真实部署", "线上监控验证"]
 }
 ```
