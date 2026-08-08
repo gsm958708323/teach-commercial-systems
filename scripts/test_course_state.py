@@ -48,9 +48,12 @@ class CourseStateTests(unittest.TestCase):
         return payload_path
 
     def create_lesson_artifacts(self, lesson_id: str = "01-skeleton") -> tuple[Path, Path, Path]:
-        demo = self.project_root / "learning-labs" / COURSE_ID / lesson_id
+        demo = self.project_root / "Assets" / "_CourseDemos" / lesson_id
         demo.mkdir(parents=True)
-        (demo / "main.py").write_text("print('demo')\n", encoding="utf-8")
+        (demo / "Demo.cs").write_text(
+            "namespace CourseDemos { public static class Demo { public static int Run() => 1; } }\n",
+            encoding="utf-8",
+        )
         doc = (
             self.project_root
             / "docs"
@@ -62,16 +65,59 @@ class CourseStateTests(unittest.TestCase):
         doc.parent.mkdir(parents=True)
         doc.write_text(
             "# Walking Skeleton\n\n"
-            "- 路径：learning-labs/course-a1b2c3d4/01-skeleton\n"
-            "- 运行命令：python main.py\n"
-            "- 预期结果：输出 demo\n"
-            "- 实际结果：输出 demo\n",
+            "- 路径：Assets/_CourseDemos/01-skeleton\n"
+            "- 运行命令：dotnet test --filter 01-skeleton\n"
+            "- 预期结果：C# focused test passed\n"
+            "- 实际结果：C# focused test passed\n",
             encoding="utf-8",
         )
-        main_file = self.project_root / "src" / "main.py"
-        main_file.parent.mkdir()
-        main_file.write_text("print('project')\n", encoding="utf-8")
+        main_file = self.project_root / "Assets" / "Scripts" / "Combat" / "CombatRuntime.cs"
+        main_file.parent.mkdir(parents=True)
+        main_file.write_text(
+            "namespace Combat { public static class CombatRuntime { public static int Tick() => 1; } }\n",
+            encoding="utf-8",
+        )
         return demo, doc, main_file
+
+    def create_course_design_artifact(self) -> Path:
+        doc = (
+            self.project_root
+            / "docs"
+            / "course"
+            / COURSE_ID
+            / "lessons"
+            / "00-course-outline.md"
+        )
+        doc.parent.mkdir(parents=True)
+        doc.write_text(
+            "# 课程设计与路线确认\n\n"
+            "## 最终目标\n\n"
+            "构建本地完整的商用候选战斗系统。\n\n"
+            "## 验收标准\n\n"
+            "- C# focused verification passed\n",
+            encoding="utf-8",
+        )
+        return doc
+
+    def create_course_design_artifact(self) -> Path:
+        doc = (
+            self.project_root
+            / "docs"
+            / "course"
+            / COURSE_ID
+            / "lessons"
+            / "00-course-outline.md"
+        )
+        doc.parent.mkdir(parents=True)
+        doc.write_text(
+            "# 课程设计与路线确认\n\n"
+            "## 最终目标\n\n"
+            "构建本地完整的商用候选战斗系统。\n\n"
+            "## 验收标准\n\n"
+            "- C# focused verification passed\n",
+            encoding="utf-8",
+        )
+        return doc
 
     def test_init_creates_utf8_state_and_templates(self) -> None:
         state = self.init_course()
@@ -130,7 +176,7 @@ class CourseStateTests(unittest.TestCase):
                 "id": "01-walking-skeleton",
                 "title": "可运行 Walking Skeleton",
                 "status": "in_progress",
-                "demo_path": "learning-labs/course-a1b2c3d4/01-walking-skeleton",
+                "demo_path": "Assets/_CourseDemos/01-walking-skeleton",
                 "doc_path": "docs/course/course-a1b2c3d4/lessons/01-walking-skeleton.md",
                 "main_files": [],
                 "verification": [],
@@ -201,7 +247,101 @@ class CourseStateTests(unittest.TestCase):
         self.assertNotIn("旧阶段记录", current_progress)
         self.assertIn("archive/phase-1.md", index.read_text(encoding="utf-8"))
 
-    def test_formal_lesson_requires_demo_and_project_verification(self) -> None:
+    def test_formal_lesson_requires_csharp_verification(self) -> None:
+        self.init_course()
+        demo, doc, main_file = self.create_lesson_artifacts("01-skeleton")
+        payload = {
+            "course_status": "active",
+            "phase_id": "1",
+            "phase_status": "in_progress",
+            "current_lesson": {
+                "id": "01-skeleton",
+                "title": "C# Runtime Walking Skeleton",
+                "status": "awaiting_confirmation",
+                "demo_path": demo.relative_to(self.project_root).as_posix(),
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [main_file.relative_to(self.project_root).as_posix()],
+                "verification": [],
+            },
+            "next_lesson": None,
+            "summary": "骨架完成。",
+            "decisions": [],
+            "blockers": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "passed csharp verification"):
+            course_state.apply_checkpoint(
+                self.project_root,
+                self.write_payload(payload),
+                now=FIXED_NOW,
+            )
+
+    def test_first_course_design_lesson_can_complete_without_code(self) -> None:
+        self.init_course()
+        doc = self.create_course_design_artifact()
+        payload = {
+            "course_status": "active",
+            "phase_id": "0",
+            "phase_status": "in_progress",
+            "current_lesson": {
+                "id": "00-course-outline",
+                "title": "课程设计与路线确认",
+                "status": "awaiting_confirmation",
+                "demo_path": "",
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [],
+                "verification": [],
+            },
+            "next_lesson": {
+                "id": "01-csharp-runtime-skeleton",
+                "title": "C# Runtime Walking Skeleton",
+            },
+            "summary": "课程路线已确认，第一节不写代码。",
+            "decisions": [],
+            "blockers": [],
+        }
+
+        state = course_state.apply_checkpoint(
+            self.project_root,
+            self.write_payload(payload),
+            now=FIXED_NOW,
+        )
+
+        self.assertEqual(
+            state["current_lesson"]["id"],
+            "00-course-outline",
+        )
+
+    def test_course_design_lesson_rejects_external_demo_path(self) -> None:
+        self.init_course()
+        doc = self.create_course_design_artifact()
+        payload = {
+            "course_status": "active",
+            "phase_id": "0",
+            "phase_status": "in_progress",
+            "current_lesson": {
+                "id": "00-course-outline",
+                "title": "课程设计与路线确认",
+                "status": "awaiting_confirmation",
+                "demo_path": "learning-labs/course-a1b2c3d4/00-course-outline",
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [],
+                "verification": [],
+            },
+            "next_lesson": None,
+            "summary": "课程路线已确认。",
+            "decisions": [],
+            "blockers": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "project-internal"):
+            course_state.apply_checkpoint(
+                self.project_root,
+                self.write_payload(payload),
+                now=FIXED_NOW,
+            )
+
+    def test_external_learning_labs_demo_is_rejected(self) -> None:
         self.init_course()
         payload = {
             "course_status": "active",
@@ -216,10 +356,10 @@ class CourseStateTests(unittest.TestCase):
                 "main_files": ["src/main.py"],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python demo.py",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-walking-skeleton",
                         "status": "passed",
-                        "summary": "Demo 运行成功",
+                        "summary": "C# focused test passed",
                     }
                 ],
             },
@@ -229,38 +369,33 @@ class CourseStateTests(unittest.TestCase):
             "blockers": [],
         }
 
-        with self.assertRaisesRegex(ValueError, "project verification"):
+        with self.assertRaisesRegex(ValueError, "project-internal"):
             course_state.apply_checkpoint(
                 self.project_root,
                 self.write_payload(payload),
                 now=FIXED_NOW,
             )
 
-    def test_formal_lesson_rejects_failed_project_verification(self) -> None:
+    def test_formal_lesson_rejects_failed_csharp_verification(self) -> None:
         self.init_course()
+        demo, doc, main_file = self.create_lesson_artifacts("01-skeleton")
         payload = {
             "course_status": "active",
             "phase_id": "1",
             "phase_status": "in_progress",
             "current_lesson": {
-                "id": "01-walking-skeleton",
-                "title": "可运行 Walking Skeleton",
+                "id": "01-skeleton",
+                "title": "C# Runtime Walking Skeleton",
                 "status": "awaiting_confirmation",
-                "demo_path": "learning-labs/course-a1b2c3d4/01-walking-skeleton",
-                "doc_path": "docs/course/course-a1b2c3d4/lessons/01-walking-skeleton.md",
-                "main_files": ["src/main.py"],
+                "demo_path": demo.relative_to(self.project_root).as_posix(),
+                "doc_path": doc.relative_to(self.project_root).as_posix(),
+                "main_files": [main_file.relative_to(self.project_root).as_posix()],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python main.py",
-                        "status": "passed",
-                        "summary": "Demo passed",
-                    },
-                    {
-                        "scope": "project",
-                        "command": "python -m unittest",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-skeleton",
                         "status": "failed",
-                        "summary": "Project tests failed",
+                        "summary": "C# focused test failed",
                     },
                 ],
             },
@@ -270,7 +405,7 @@ class CourseStateTests(unittest.TestCase):
             "blockers": ["修复主项目测试"],
         }
 
-        with self.assertRaisesRegex(ValueError, "passed project verification"):
+        with self.assertRaisesRegex(ValueError, "passed csharp verification"):
             course_state.apply_checkpoint(
                 self.project_root,
                 self.write_payload(payload),
@@ -287,21 +422,15 @@ class CourseStateTests(unittest.TestCase):
                 "id": "01-walking-skeleton",
                 "title": "可运行 Walking Skeleton",
                 "status": "awaiting_confirmation",
-                "demo_path": "learning-labs/course-a1b2c3d4/01-walking-skeleton",
+                "demo_path": "Assets/_CourseDemos/01-walking-skeleton",
                 "doc_path": "docs/course/course-a1b2c3d4/lessons/01-walking-skeleton.md",
-                "main_files": ["src/main.py"],
+                "main_files": ["Assets/Scripts/Combat/CombatRuntime.cs"],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python main.py",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-walking-skeleton",
                         "status": "passed",
-                        "summary": "Demo passed",
-                    },
-                    {
-                        "scope": "project",
-                        "command": "python -m unittest",
-                        "status": "passed",
-                        "summary": "Project passed",
+                        "summary": "C# focused test passed",
                     },
                 ],
             },
@@ -337,16 +466,10 @@ class CourseStateTests(unittest.TestCase):
             "main_files": [main_file.relative_to(self.project_root).as_posix()],
             "verification": [
                 {
-                    "scope": "demo",
-                    "command": "python main.py",
+                    "scope": "csharp",
+                    "command": "dotnet test --filter 01-skeleton",
                     "status": "passed",
-                    "summary": "Demo passed",
-                },
-                {
-                    "scope": "project",
-                    "command": "python src/main.py",
-                    "status": "passed",
-                    "summary": "Project passed",
+                    "summary": "C# focused test passed",
                 },
             ],
         }
@@ -397,16 +520,10 @@ class CourseStateTests(unittest.TestCase):
                 "main_files": [main_file.relative_to(self.project_root).as_posix()],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python main.py",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-skeleton",
                         "status": "passed",
-                        "summary": "Demo passed",
-                    },
-                    {
-                        "scope": "project",
-                        "command": "python src/main.py",
-                        "status": "passed",
-                        "summary": "Project passed",
+                        "summary": "C# focused test passed",
                     },
                 ],
             },
@@ -441,16 +558,10 @@ class CourseStateTests(unittest.TestCase):
                 "main_files": [main_file.relative_to(self.project_root).as_posix()],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python main.py",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-skeleton",
                         "status": "passed",
-                        "summary": "Demo passed",
-                    },
-                    {
-                        "scope": "project",
-                        "command": "python src/main.py",
-                        "status": "passed",
-                        "summary": "Project passed",
+                        "summary": "C# focused test passed",
                     },
                 ],
             },
@@ -539,8 +650,8 @@ class CourseStateTests(unittest.TestCase):
             "requirements_map_path": "docs/acceptance-map.md",
             "architecture_current": True,
             "architecture_path": "docs/architecture.md",
-            "start_command": {"command": "python -m app", "status": "passed"},
-            "test_command": {"command": "python -m unittest", "status": "passed"},
+            "start_command": {"command": "dotnet test --filter Smoke", "status": "passed"},
+            "test_command": {"command": "dotnet test", "status": "passed"},
             "excluded_launch_work": ["云部署"],
         }
         (self.project_root / ".course" / "course.json").write_text(
@@ -576,16 +687,10 @@ class CourseStateTests(unittest.TestCase):
                 "main_files": [main_file.relative_to(self.project_root).as_posix()],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python main.py",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-skeleton",
                         "status": "passed",
-                        "summary": "Demo passed",
-                    },
-                    {
-                        "scope": "project",
-                        "command": "python src/main.py",
-                        "status": "passed",
-                        "summary": "Project passed",
+                        "summary": "C# focused test passed",
                     },
                 ],
             }
@@ -596,8 +701,8 @@ class CourseStateTests(unittest.TestCase):
             "requirements_map_path": "docs/acceptance-map.md",
             "architecture_current": True,
             "architecture_path": "docs/architecture.md",
-            "start_command": {"command": "python src/main.py", "status": "passed"},
-            "test_command": {"command": "python -m unittest", "status": "passed"},
+            "start_command": {"command": "dotnet test --filter Smoke", "status": "passed"},
+            "test_command": {"command": "dotnet test", "status": "passed"},
             "excluded_launch_work": ["真实云部署", "线上监控验证"],
         }
         (self.project_root / ".course" / "course.json").write_text(
@@ -629,21 +734,15 @@ class CourseStateTests(unittest.TestCase):
             {
                 "id": "01-skeleton",
                 "title": "Walking Skeleton",
-                "demo_path": f"learning-labs/{COURSE_ID}/01-skeleton",
+                "demo_path": "Assets/_CourseDemos/01-skeleton",
                 "doc_path": f"docs/course/{COURSE_ID}/lessons/01-skeleton.md",
-                "main_files": ["src/main.py"],
+                "main_files": ["Assets/Scripts/Combat/CombatRuntime.cs"],
                 "verification": [
                     {
-                        "scope": "demo",
-                        "command": "python main.py",
+                        "scope": "csharp",
+                        "command": "dotnet test --filter 01-skeleton",
                         "status": "passed",
-                        "summary": "Demo passed",
-                    },
-                    {
-                        "scope": "project",
-                        "command": "python src/main.py",
-                        "status": "passed",
-                        "summary": "Project passed",
+                        "summary": "C# focused test passed",
                     },
                 ],
             }
@@ -654,8 +753,8 @@ class CourseStateTests(unittest.TestCase):
             "requirements_map_path": "docs/acceptance-map.md",
             "architecture_current": True,
             "architecture_path": "docs/architecture.md",
-            "start_command": {"command": "python src/main.py", "status": "passed"},
-            "test_command": {"command": "python -m unittest", "status": "passed"},
+            "start_command": {"command": "dotnet test --filter Smoke", "status": "passed"},
+            "test_command": {"command": "dotnet test", "status": "passed"},
             "commercial_readiness_checked": True,
             "learning_assessment_checked": True,
             "excluded_launch_work": ["真实云部署", "线上监控验证"],

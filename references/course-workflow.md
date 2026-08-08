@@ -27,11 +27,11 @@
 
 | 阶段 | 目标 | 正式代码输出 | 退出条件 |
 |---|---|---|---|
-| 0. 需求访谈与方案选择 | 固定目标、约束、受众、技术栈和验收 | 无；此阶段不是正式课程节 | 用户确认方案和课程里程碑 |
-| 1. Walking Skeleton | 建立可启动的最小架构和边界 | 独立骨架 Demo、主项目骨架、smoke test | 两条代码路径都能运行 |
-| 2. 核心抽象与接口 | 固定关键数据、接口和依赖方向 | 最小抽象 Demo、主项目 contracts、contract tests | 复杂需求走查不破坏边界 |
-| 3. 基础设施 | 提供当前项目真正需要的通用能力 | 每项能力的独立 Demo、主项目实现和测试 | 子系统不再自建重复基础能力 |
-| 4. 子系统逐个实现 | 按依赖顺序完成业务能力 | 每个子系统的 Demo、完整主代码和测试 | 约定功能全部集成 |
+| 0. 需求访谈与方案选择 | 固定目标、约束、受众、技术栈和验收 | 课程路线文档；可用 `00-course-outline`，不写代码 | 用户确认方案和课程里程碑 |
+| 1. Walking Skeleton | 建立可启动的最小架构和边界 | 项目内教学切片、主项目骨架、C# smoke test | C# focused verification 通过 |
+| 2. 核心抽象与接口 | 固定关键数据、接口和依赖方向 | 项目内教学切片、主项目 contracts、C# contract tests | 复杂需求走查不破坏边界 |
+| 3. 基础设施 | 提供当前项目真正需要的通用能力 | 每项能力的项目内教学切片、主项目实现和 C# test | 子系统不再自建重复基础能力 |
+| 4. 子系统逐个实现 | 按依赖顺序完成业务能力 | 每个子系统的项目内教学切片、完整主代码和 C# test | 约定功能全部集成 |
 | 5. 集成与本地质量 | 验证跨子系统流程、调试性、本地质量和商用候选风险 | 集成场景、回归测试、必要诊断能力、商业风险清单 | 核心用户流程稳定通过，关键商业风险已解决或记录 |
 | 6. 验收与复盘 | 证明课程、项目和学习目标闭环 | 验收映射、最终架构文档、运行说明、学习复盘 | `validate --complete` 通过 |
 
@@ -47,7 +47,7 @@
 - 学习者经验与希望掌握的能力。
 - 新项目或已有项目。
 - 语言、框架、平台和禁止事项。
-- 本地运行与测试命令的目标形态。
+- 本地运行与 C# focused verification 命令的目标形态。
 - 功能范围和明确不做的内容。
 - 商用候选版本的边界：必须完整交付什么，哪些上线工作明确不包含。
 - 学习验收方式：用户希望通过方案选择、设计反推、代码走查还是复盘来训练判断力。
@@ -60,7 +60,7 @@
 python <skill-root>/scripts/course_state.py init <project-root> --mode <new|existing> --title <title>
 ```
 
-随后填写 `.course/plan.md` 的最终目标、里程碑验收条件、当前课程节和下一课程节。
+随后填写 `.course/plan.md` 的最终目标、里程碑验收条件、当前课程节和下一课程节。第一节可以是 `00-course-outline` 课程设计节，只输出课程路线和验收，不生成代码。
 
 ## 4. Rolling Wave 计划
 
@@ -91,7 +91,7 @@ planning
 
 ## 6. Checkpoint 格式
 
-每次 checkpoint 提供完整当前快照，而不是含义不明的局部文本：
+每次 checkpoint 提供压缩当前快照，只保留恢复所需字段；长解释写入课程文档，`summary` 不超过 500 字：
 
 ```json
 {
@@ -102,21 +102,15 @@ planning
     "id": "01-walking-skeleton",
     "title": "可运行 Walking Skeleton",
     "status": "awaiting_confirmation",
-    "demo_path": "learning-labs/course-a1b2c3d4/01-walking-skeleton",
+    "demo_path": "Assets/_CourseDemos/01-walking-skeleton",
     "doc_path": "docs/course/course-a1b2c3d4/lessons/01-walking-skeleton.md",
-    "main_files": ["src/main.py"],
+    "main_files": ["Assets/Scripts/Combat/CombatRuntime.cs"],
     "verification": [
       {
-        "scope": "demo",
-        "command": "python main.py",
+        "scope": "csharp",
+        "command": "dotnet test --filter 01-walking-skeleton",
         "status": "passed",
-        "summary": "Demo 启动并输出预期状态"
-      },
-      {
-        "scope": "project",
-        "command": "python -m unittest",
-        "status": "passed",
-        "summary": "主项目 smoke test 通过"
+        "summary": "C# focused test 通过"
       }
     ]
   },
@@ -130,7 +124,7 @@ planning
 }
 ```
 
-`awaiting_confirmation` 和 `complete` 必须同时包含通过的 `demo` 与 `project` 验证、讲解路径和至少一个主项目文件。
+代码课程节的 `awaiting_confirmation` 和 `complete` 必须包含项目内 `demo_path`、讲解路径、至少一个主项目文件和通过的 `csharp` 验证。`00-course-outline` 可以只包含讲解路径，不包含代码文件或验证。
 
 ## 7. 恢复与长上下文
 
@@ -151,7 +145,7 @@ planning
 
 - 最终架构文档。
 - 从 `assets/templates/acceptance-map.md` 创建的验收映射。
-- 本地启动与测试说明。
+- 本地 C# focused verification 与阶段/最终验收说明。
 
 最后一个 checkpoint 设置 `course_status` 为 `complete`，填入 `acceptance`：
 
@@ -161,8 +155,8 @@ planning
   "requirements_map_path": "docs/acceptance-map.md",
   "architecture_current": true,
   "architecture_path": "docs/architecture.md",
-  "start_command": {"command": "<实际命令>", "status": "passed"},
-  "test_command": {"command": "<实际命令>", "status": "passed"},
+  "start_command": {"command": "<C# smoke 命令>", "status": "passed"},
+  "test_command": {"command": "<C# 测试命令>", "status": "passed"},
   "commercial_readiness_checked": true,
   "learning_assessment_checked": true,
   "excluded_launch_work": ["真实部署", "线上监控验证"]

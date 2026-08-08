@@ -34,6 +34,7 @@ LESSON_STATUSES = {
     "complete",
 }
 VERIFICATION_STATUSES = {"passed", "failed"}
+VERIFICATION_SCOPES = {"csharp"}
 CHECKPOINT_KEYS = {
     "course_status",
     "phase_id",
@@ -128,6 +129,13 @@ def _validate_relative_path(value: Any, field: str) -> str:
     return path.as_posix()
 
 
+def _validate_demo_path(value: Any, field: str) -> str:
+    demo_path = _validate_relative_path(value, field)
+    if demo_path.startswith("learning-labs/"):
+        raise ValueError(f"{field} must be a project-internal demo path")
+    return demo_path
+
+
 def _validate_verification(value: Any) -> list[dict[str, str]]:
     if not isinstance(value, list):
         raise ValueError("current_lesson.verification must be a list")
@@ -137,8 +145,8 @@ def _validate_verification(value: Any) -> list[dict[str, str]]:
         if not isinstance(item, dict):
             raise ValueError(f"{field} must be an object")
         scope = _require_string(item.get("scope"), f"{field}.scope")
-        if scope not in {"demo", "project"}:
-            raise ValueError(f"{field}.scope must be 'demo' or 'project'")
+        if scope not in VERIFICATION_SCOPES:
+            raise ValueError(f"{field}.scope must be 'csharp'")
         status = _require_string(item.get("status"), f"{field}.status")
         if status not in VERIFICATION_STATUSES:
             raise ValueError(f"{field}.status must be 'passed' or 'failed'")
@@ -151,6 +159,10 @@ def _validate_verification(value: Any) -> list[dict[str, str]]:
             }
         )
     return result
+
+
+def _is_course_design_lesson(lesson_id: str) -> bool:
+    return lesson_id.startswith("00-")
 
 
 def _validate_lesson(
@@ -181,31 +193,33 @@ def _validate_lesson(
     ]
     verification = _validate_verification(value.get("verification", []))
 
+    is_course_design = _is_course_design_lesson(lesson_id)
+
     if status in {"awaiting_confirmation", "complete"}:
-        demo_path = _validate_relative_path(demo_path, "current_lesson.demo_path")
         doc_path = _validate_relative_path(doc_path, "current_lesson.doc_path")
-        expected_demo_prefix = f"learning-labs/{course_id}/"
         expected_doc_prefix = f"docs/course/{course_id}/lessons/"
-        if not demo_path.startswith(expected_demo_prefix):
-            raise ValueError(
-                f"current_lesson.demo_path must start with {expected_demo_prefix}"
-            )
         if not doc_path.startswith(expected_doc_prefix):
             raise ValueError(
                 f"current_lesson.doc_path must start with {expected_doc_prefix}"
             )
-        if not normalized_main_files:
-            raise ValueError("at least one main project file is required")
-        passed_scopes = {
-            item["scope"] for item in verification if item["status"] == "passed"
-        }
-        if "demo" not in passed_scopes:
-            raise ValueError("passed demo verification is required")
-        if "project" not in passed_scopes:
-            raise ValueError("passed project verification is required")
+        if is_course_design:
+            demo_path = (
+                _validate_demo_path(demo_path, "current_lesson.demo_path")
+                if demo_path
+                else ""
+            )
+        else:
+            demo_path = _validate_demo_path(demo_path, "current_lesson.demo_path")
+            if not normalized_main_files:
+                raise ValueError("at least one main project file is required")
+            passed_scopes = {
+                item["scope"] for item in verification if item["status"] == "passed"
+            }
+            if "csharp" not in passed_scopes:
+                raise ValueError("passed csharp verification is required")
     else:
         demo_path = (
-            _validate_relative_path(demo_path, "current_lesson.demo_path")
+            _validate_demo_path(demo_path, "current_lesson.demo_path")
             if demo_path
             else ""
         )
@@ -446,8 +460,8 @@ def apply_checkpoint(
     )
     next_lesson = _validate_next_lesson(payload.get("next_lesson"))
     summary = _require_string(payload.get("summary"), "summary")
-    if len(summary) > 2000:
-        raise ValueError("summary must not exceed 2000 characters")
+    if len(summary) > 500:
+        raise ValueError("summary must not exceed 500 characters")
     decisions = _validate_decisions(payload.get("decisions"))
     blockers = _validate_blockers(payload.get("blockers"))
 
@@ -735,16 +749,17 @@ def _lesson_quality_errors(
     field: str,
 ) -> list[str]:
     errors: list[str] = []
-    demo_dir = root / lesson["demo_path"]
-    if demo_dir.is_dir():
-        demo_files = [path for path in demo_dir.rglob("*") if path.is_file()]
-        if not demo_files:
-            errors.append(f"{field}.demo_path has no files")
-        for path in demo_files:
-            relative = path.relative_to(demo_dir).as_posix()
-            errors.extend(
-                _placeholder_errors(path, f"{field}.demo_path/{relative}")
-            )
+    if lesson["demo_path"]:
+        demo_dir = root / lesson["demo_path"]
+        if demo_dir.is_dir():
+            demo_files = [path for path in demo_dir.rglob("*") if path.is_file()]
+            if not demo_files:
+                errors.append(f"{field}.demo_path has no files")
+            for path in demo_files:
+                relative = path.relative_to(demo_dir).as_posix()
+                errors.extend(
+                    _placeholder_errors(path, f"{field}.demo_path/{relative}")
+                )
 
     doc_path = root / lesson["doc_path"]
     if doc_path.is_file():
@@ -763,10 +778,10 @@ def _lesson_artifact_errors(
     field: str,
 ) -> list[str]:
     errors: list[str] = []
-    for value, name, directory in (
-        (lesson["demo_path"], f"{field}.demo_path", True),
-        (lesson["doc_path"], f"{field}.doc_path", False),
-    ):
+    checks = [(lesson["doc_path"], f"{field}.doc_path", False)]
+    if lesson["demo_path"]:
+        checks.insert(0, (lesson["demo_path"], f"{field}.demo_path", True))
+    for value, name, directory in checks:
         error = _path_exists(root, value, name, directory=directory)
         if error:
             errors.append(error)
@@ -869,6 +884,7 @@ def _completion_errors(root: Path, state: dict[str, Any]) -> list[str]:
     if not isinstance(completed_lessons, list) or not completed_lessons:
         errors.append("at least one completed formal lesson is required")
     else:
+        has_code_lesson = False
         course_id = str(state.get("course_id", ""))
         for index, lesson in enumerate(completed_lessons):
             field = f"completed_lessons[{index}]"
@@ -883,7 +899,11 @@ def _completion_errors(root: Path, state: dict[str, Any]) -> list[str]:
                 errors.append(f"{field}: {exc}")
                 continue
             assert normalized is not None
+            if not _is_course_design_lesson(normalized["id"]):
+                has_code_lesson = True
             errors.extend(_lesson_artifact_errors(root, normalized, field))
+        if not has_code_lesson:
+            errors.append("at least one completed code lesson is required")
 
     acceptance = state.get("acceptance")
     if not isinstance(acceptance, dict):

@@ -1,4 +1,4 @@
 interface:
   display_name: "商用系统架构课程"
-  short_description: "分阶段讲解架构、运行独立 Demo，并持续集成为完整项目代码"
+  short_description: "分阶段讲解架构、运行项目内教学切片，并持续集成为完整项目代码"
   default_prompt: "使用 $teach-commercial-systems 开始或继续一门以可运行代码落地的商用系统架构课程。"

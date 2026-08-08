@@ -1,6 +1,6 @@
 ---
 name: teach-commercial-systems
-description: "以顶级领域架构师视角，用中文分阶段教授并实际生成完整系统代码。Use when the user asks to learn, design, or build a commercial-quality system step by step; requests architecture alternatives, runnable lessons, independent demos, an evolving final project, a long-running course plan, or asks to continue or resume an existing course. Supports new and existing projects, with an on-demand game-system profile for combat, ECS, replay, deterministic simulation, or network synchronization topics."
+description: "以顶级领域架构师视角，用中文分阶段教授并实际生成完整系统代码。Use when the user asks to learn, design, or build a commercial-quality system step by step; requests architecture alternatives, runnable lessons, project-internal teaching slices, an evolving final project, a long-running course plan, or asks to continue or resume an existing course. Supports new and existing projects, with an on-demand game-system profile for combat, ECS, replay, deterministic simulation, or network synchronization topics."
 ---
 
 # Teach Commercial Systems
@@ -54,20 +54,26 @@ course_state.py validate <project-root> [--complete]
 - 用户确认进入下一节时，先将上一节标记为 `complete`。
 - 最终验收完成时。
 
+checkpoint 只记录恢复课程所需的压缩状态，`summary` 不超过 500 字；设计理由和长讲解写入课程文档，不写进 checkpoint。
+
 恢复时只加载 CLI 摘要、`plan.md` 的当前/下一节、`progress.md` 最近记录、当前课程文档和直接相关源码。不要加载全部旧课程文档或完整对话。
 
 ## 正式课程节
 
-每个正式课程节必须同时产生两条代码路径：
+`00-course-outline` 是课程设计节，可以不写代码，只输出课程目标、范围、阶段路线、验收标准和第一节之后的计划。
 
-1. 在 `learning-labs/<course-id>/<lesson-id>/` 创建独立、最小、可运行的教学 Demo。
-2. 在同一课程节把该能力集成进最终主项目，并保持主项目可运行。
+除 `00-course-outline` 外，每个代码课程节必须在同一个主项目内同时产生两类增量：
 
-实际运行 Demo 命令、主项目针对性测试和必要回归测试。没有运行证据、只有 Demo、只有伪代码、缺少主项目集成或测试失败时，不得进入 `awaiting_confirmation`。
+1. 项目内教学切片：放在项目目录内的 demo、sample、fixture 或测试场景，例如 `Assets/_CourseDemos/<lesson-id>/` 或 `Assets/Tests/...`。
+2. 主项目正式代码：把该能力集成进最终项目模块，并保持主项目可运行。
+
+不要再创建项目外独立 Demo；项目内教学切片可以引用主项目代码，但必须足够小，专门证明本节核心原理。
+
+代码课程节默认只运行 C# focused verification，例如纯 C# test、compile check 或 Unity 项目中的 C# EditMode focused test。Unity batchmode、完整 EditMode 或集成回归只在阶段边界、最终验收或用户明确要求时运行。没有 C# 验证证据、只有伪代码、缺少主项目集成或测试失败时，不得进入 `awaiting_confirmation`。
 
 把完整代码写入文件。对话只展示最关键的 1–2 个代码片段，其余使用文件链接和运行结果说明。不要留下影响本节运行的占位实现、缺失 import、缺失配置或省略代码。
 
-将完整讲解写入 `docs/course/<course-id>/lessons/<lesson-id>.md`。使用 `assets/templates/lesson.md` 的结构，包含为什么、替代方案、接口与数据结构、调用链、Demo、主项目集成、验证结果、Demo/主项目/商用候选版本边界、业余做法与商业做法、扩展边界和设计反推自检场景。
+将完整讲解写入 `docs/course/<course-id>/lessons/<lesson-id>.md`。使用 `assets/templates/lesson.md` 的结构，包含为什么、替代方案、接口与数据结构、调用链、项目内教学切片、主项目集成、C# 验证结果、教学切片/主项目/商用候选版本边界、业余做法与商业做法、扩展边界和设计反推自检场景。
 
 ## 每轮结束
 
@@ -85,9 +91,9 @@ course_state.py validate <project-root> [--complete]
 仅在以下条件全部满足后设置课程为 `complete` 并运行 `validate --complete`：
 
 - 所有承诺功能已集成到主项目。
-- 主项目启动命令和核心测试已实际通过。
-- 每个正式课程节都保留 Demo、讲解、主项目文件映射和两类验证。
-- 每个正式课程节都说明 Demo、主项目和商用候选版本的差异，并包含设计反推自检。
+- 主项目 C# focused verification 和核心测试已实际通过。
+- 每个代码课程节都保留项目内教学切片、讲解、主项目文件映射和 C# 验证。
+- 每个代码课程节都说明教学切片、主项目和商用候选版本的差异，并包含设计反推自检。
 - 最终架构文档与代码一致。
 - 使用 `assets/templates/acceptance-map.md` 建立需求、代码、测试和课程节映射。
 - 最终 checkpoint 记录 `acceptance.commercial_readiness_checked=true` 与 `acceptance.learning_assessment_checked=true`。
